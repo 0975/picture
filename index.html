@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片先打散后隐写系统</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            padding: 40px 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        h1, h2 { text-align: center; color: #2c3e50; }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+        }
+        .btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+        .btn:hover { background-color: #2980b9; }
+        .btn-success { background-color: #2ecc71; }
+        .btn-success:hover { background-color: #27ae60; }
+        .btn-danger { background-color: #e74c3c; }
+        .btn-danger:hover { background-color: #c0392b; }
+        .preview-box {
+            border: 2px dashed #bdc3c7;
+            border-radius: 8px;
+            min-height: 250px;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fafafa;
+            position: relative;
+            overflow: hidden;
+        }
+        canvas, img {
+            max-width: 100%;
+            max-height: 400px;
+            object-fit: contain;
+            pointer-events: none; 
+            -webkit-touch-callout: none; 
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        .info-log {
+            background: #2c3e50;
+            color: #2ecc71;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+            margin-top: 15px;
+            word-break: break-all;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        input[type="file"] { display: none; }
+        .file-label {
+            display: block;
+            text-align: center;
+            background: #e67e22;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Image Scrambler (Post-Steganography)</h1>
+    <p style="text-align:center; color: #7f8c8d;">逻辑重构：先打乱切片 ──► 再整体隐写 ID ──► 完美无损还原</p>
+
+    <div class="container">
+        <div class="card">
+            <h2>1. 打散并隐写图片</h2>
+            <label for="upload-raw" class="file-label">选择原图上传</label>
+            <input type="file" id="upload-raw" accept="image/*">
+            
+            <div class="preview-box" id="scramble-container">
+                <span style="color:#95a5a6;">等待上传原图...</span>
+            </div>
+            
+            <button class="btn" id="btn-scramble" disabled>点击打乱并埋入ID</button>
+            <button class="btn btn-success" id="btn-download" style="display:none;">安全下载打散图</button>
+            
+            <div id="scramble-log" class="info-log" style="display:none;"></div>
+        </div>
+
+        <div class="card">
+            <h2>2. 识别并逆向还原</h2>
+            <label for="upload-scrambled" class="file-label" style="background:#9b59b6;">上传打散的PNG图片</label>
+            <input type="file" id="upload-scrambled" accept="image/png">
+            
+            <div class="preview-box" id="restore-container">
+                <span style="color:#95a5a6;">等待上传打散图...</span>
+            </div>
+            
+            <button class="btn btn-success" id="btn-restore" disabled>识别水印并还原图片</button>
+            <button class="btn btn-danger" id="btn-fake-download" style="display:none;">下载还原后的图片</button>
+            
+            <div id="restore-log" class="info-log" style="display:none;"></div>
+        </div>
+    </div>
+
+<script>
+    const GRID_SIZE = 64; // 已经改为你需要的 16x16 网格
+    let originalImage = null;
+    let finalCanvasGlobal = null;
+    let restoredCanvasGlobal = null; // 新增：用来暂存还原后的真实画布
+
+    // --- PRNG 伪随机发生器 ---
+    function sfc32(a, b, c, d) {
+        return function() {
+            a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+            var t = (a + b) | 0;
+            a = b ^ (b >>> 9);
+            b = (c + (c << 3)) | 0;
+            c = (c << 21) | (c >>> 11);
+            d = (d + 1) | 0;
+            t = (t + d) | 0;
+            c = (c + t) | 0;
+            return (t >>> 0) / 4294967296;
+        }
+    }
+    function createRandomPairs(seed, length) {
+        let rand = sfc32(seed, 0x9E3779B9, 0x243F6A88, btoa(seed).charCodeAt(0));
+        let arr = Array.from({length}, (_, i) => i);
+        for (let i = length - 1; i > 0; i--) {
+            const j = Math.floor(rand() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    // --- LSB 隐写术核心 ---
+    function embedWatermark(imageData, text) {
+        let textBin = "";
+        for (let i = 0; i < text.length; i++) {
+            textBin += text.charCodeAt(i).toString(2).padStart(8, '0');
+        }
+        let lenBin = textBin.length.toString(2).padStart(16, '0');
+        let binaryStr = lenBin + textBin;
+
+        let data = imageData.data;
+        if (binaryStr.length > data.length / 4) {
+            alert("错误：图片像素不足以容纳该长度的ID！");
+            return false;
+        }
+
+        for (let i = 0; i < binaryStr.length; i++) {
+            let bit = parseInt(binaryStr[i]);
+            data[i * 4] = (data[i * 4] & 0xFE) | bit; 
+        }
+        return true;
+    }
+
+    function extractWatermark(imageData) {
+        let data = imageData.data;
+        let lenBin = "";
+        for (let i = 0; i < 16; i++) {
+            lenBin += (data[i * 4] & 1).toString();
+        }
+        let totalBits = parseInt(lenBin, 2);
+        
+        if (isNaN(totalBits) || totalBits <= 0 || totalBits > data.length / 4) {
+            return null;
+        }
+
+        let textBin = "";
+        for (let i = 16; i < 16 + totalBits; i++) {
+            textBin += (data[i * 4] & 1).toString();
+        }
+
+        let result = "";
+        for (let i = 0; i < textBin.length; i += 8) {
+            let byte = textBin.substr(i, 8);
+            result += String.fromCharCode(parseInt(byte, 2));
+        }
+        return result;
+    }
+
+    function preventSteal(element) {
+        element.addEventListener('contextmenu', e => e.preventDefault());
+        element.addEventListener('touchstart', e => {
+            if (e.touches.length > 1) e.preventDefault();
+        }, { passive: false });
+    }
+
+    // --- 1. 打散与隐写逻辑 ---
+    document.getElementById('upload-raw').addEventListener('change', function(e) {
+        let reader = new FileReader();
+        reader.onload = function(event) {
+            originalImage = new Image();
+            originalImage.onload = function() {
+                const container = document.getElementById('scramble-container');
+                container.innerHTML = '';
+                container.appendChild(originalImage);
+                document.getElementById('btn-scramble').disabled = false;
+            }
+            originalImage.src = event.target.result;
+        }
+        reader.readAsDataURL(e.target.files[0]);
+    });
+
+    document.getElementById('btn-scramble').addEventListener('click', function() {
+        if (!originalImage) return;
+
+        const blockW = Math.floor(originalImage.width / GRID_SIZE);
+        const blockH = Math.floor(originalImage.height / GRID_SIZE);
+        const imgWidth = blockW * GRID_SIZE;
+        const imgHeight = blockH * GRID_SIZE;
+
+        const rawCanvas = document.createElement('canvas');
+        rawCanvas.width = imgWidth;
+        rawCanvas.height = imgHeight;
+        const rawCtx = rawCanvas.getContext('2d');
+        rawCtx.drawImage(originalImage, 0, 0, imgWidth, imgHeight);
+
+        const scrambledCanvas = document.createElement('canvas');
+        scrambledCanvas.width = imgWidth;
+        scrambledCanvas.height = imgHeight;
+        const sCtx = scrambledCanvas.getContext('2d');
+
+        const seed = Math.floor(Math.random() * 1000000);
+        const configObject = { seed: seed, grid: GRID_SIZE };
+        const scrambledID = btoa(JSON.stringify(configObject)); 
+
+        const totalBlocks = GRID_SIZE * GRID_SIZE;
+        const shuffleMap = createRandomPairs(seed, totalBlocks);
+
+        for (let i = 0; i < totalBlocks; i++) {
+            const srcIdx = i;
+            const destIdx = shuffleMap[i];
+
+            const srcX = (srcIdx % GRID_SIZE) * blockW;
+            const srcY = Math.floor(srcIdx / GRID_SIZE) * blockH;
+            const destX = (destIdx % GRID_SIZE) * blockW;
+            const destY = Math.floor(destIdx / GRID_SIZE) * blockH;
+
+            sCtx.drawImage(rawCanvas, srcX, srcY, blockW, blockH, destX, destY, blockW, blockH);
+        }
+
+        let scrambledImgData = sCtx.getImageData(0, 0, imgWidth, imgHeight);
+        const success = embedWatermark(scrambledImgData, scrambledID);
+        
+        if (success) {
+            sCtx.putImageData(scrambledImgData, 0, 0);
+
+            const container = document.getElementById('scramble-container');
+            container.innerHTML = '';
+            container.appendChild(scrambledCanvas);
+            preventSteal(scrambledCanvas);
+
+            finalCanvasGlobal = scrambledCanvas;
+
+            const logBox = document.getElementById('scramble-log');
+            logBox.style.display = 'block';
+            logBox.innerHTML = `处理成功！<br>1. 图片切块已完成打乱<br>2. 完整加密ID已隐写覆盖至打散图中<br>ID: ${scrambledID}`;
+
+            document.getElementById('btn-download').style.display = 'block';
+        }
+    });
+
+    document.getElementById('btn-download').addEventListener('click', function() {
+        if (!finalCanvasGlobal) return;
+        const dataUrl = finalCanvasGlobal.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `secure_scrambled_${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
+
+
+    // --- 2. 识别与逆向还原逻辑 ---
+    let scrambledImageForRestore = null;
+
+    document.getElementById('upload-scrambled').addEventListener('change', function(e) {
+        let reader = new FileReader();
+        reader.onload = function(event) {
+            scrambledImageForRestore = new Image();
+            scrambledImageForRestore.onload = function() {
+                const container = document.getElementById('restore-container');
+                container.innerHTML = '';
+                container.appendChild(scrambledImageForRestore);
+                preventSteal(scrambledImageForRestore);
+                document.getElementById('btn-restore').disabled = false;
+                document.getElementById('btn-fake-download').style.display = 'none'; // 切换图片时隐藏虚假下载键
+            }
+            scrambledImageForRestore.src = event.target.result;
+        }
+        reader.readAsDataURL(e.target.files[0]);
+    });
+
+    document.getElementById('btn-restore').addEventListener('click', function() {
+        if (!scrambledImageForRestore) return;
+
+        const w = scrambledImageForRestore.width;
+        const h = scrambledImageForRestore.height;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(scrambledImageForRestore, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const extractedID = extractWatermark(imgData);
+
+        const logBox = document.getElementById('restore-log');
+        logBox.style.display = 'block';
+
+        if (!extractedID) {
+            logBox.innerHTML = "<span style='color:#e74c3c;'>解密失败：未在图片头部检测到完整的隐写数据（可能文件被无损压缩损坏）。</span>";
+            return;
+        }
+
+        try {
+            const config = JSON.parse(atob(extractedID));
+            logBox.innerHTML = `成功提取连续ID: ${extractedID}<br>获取种子密码: ${config.seed}<br>正在执行逆向矩阵还原...`;
+
+            const restoreCanvas = document.createElement('canvas');
+            restoreCanvas.width = w;
+            restoreCanvas.height = h;
+            const rCtx = restoreCanvas.getContext('2d');
+
+            const blockW = Math.floor(w / config.grid);
+            const blockH = Math.floor(h / config.grid);
+            const totalBlocks = config.grid * config.grid;
+
+            const shuffleMap = createRandomPairs(config.seed, totalBlocks);
+
+            for (let i = 0; i < totalBlocks; i++) {
+                const srcIdx = i; 
+                const destIdx = shuffleMap[i]; 
+
+                const srcX = (srcIdx % config.grid) * blockW;
+                const srcY = Math.floor(srcIdx / config.grid) * blockH;
+                const destX = (destIdx % config.grid) * blockW;
+                const destY = Math.floor(destIdx / config.grid) * blockH;
+
+                rCtx.drawImage(canvas, destX, destY, blockW, blockH, srcX, srcY, blockW, blockH);
+            }
+
+            const container = document.getElementById('restore-container');
+            container.innerHTML = '';
+            container.appendChild(restoreCanvas);
+            preventSteal(restoreCanvas);
+            
+            restoredCanvasGlobal = restoreCanvas; // 留底，供整蛊下载时调用
+
+            logBox.innerHTML += "<br><span style='color:#2ecc71;'>恭喜！图片已完美逆向还原。</span>";
+            document.getElementById('btn-fake-download').style.display = 'block'; // 显示整蛊下载按钮
+
+        } catch(err) {
+            logBox.innerHTML = "<span style='color:#e74c3c;'>解析错误：虽然提取到了密文，但 Base64 数据由于像素偏差损坏。</span>";
+            console.error(err);
+        }
+    });
+
+    // --- 新增：核心整蛊整顿下载逻辑 ---
+    document.getElementById('btn-fake-download').addEventListener('click', function() {
+        if (!restoredCanvasGlobal) return;
+
+        const w = restoredCanvasGlobal.width;
+        const h = restoredCanvasGlobal.height;
+
+        // 1. 创建一个用来恶意摧毁的临时画布
+        const destroyCanvas = document.createElement('canvas');
+        destroyCanvas.width = w;
+        destroyCanvas.height = h;
+        const dCtx = destroyCanvas.getContext('2d');
+
+        // 2. 将原图画面读出并执行【像素行随机错位扭曲】
+        dCtx.drawImage(restoredCanvasGlobal, 0, 0);
+        const imgData = dCtx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+
+        // 逐行执行正弦波严重扭曲 + 随机像素杂色
+        for (let y = 0; y < h; y++) {
+            // 用正弦函数和随机数制造极其夸张的左右平移断裂
+            const shift = Math.floor(Math.sin(y / 10) * 30 + (Math.random() - 0.5) * 20);
+            if (shift !== 0) {
+                const rowStart = y * w * 4;
+                // 临时的单行像素缓冲
+                const rowBuffer = new Uint8ClampedArray(data.buffer, rowStart, w * 4).slice();
+                for (let x = 0; x < w; x++) {
+                    const targetX = (x + shift + w) % w;
+                    data[rowStart + targetX * 4]     = rowBuffer[x * 4];
+                    data[rowStart + targetX * 4 + 1] = rowBuffer[x * 4 + 1];
+                    data[rowStart + targetX * 4 + 2] = rowBuffer[x * 4 + 2];
+                }
+            }
+        }
+        dCtx.putImageData(imgData, 0, 0);
+
+        // 3. 在严重扭曲的画面上写上红色的“不许下载！！！”
+        const fontSize = Math.max(24, Math.floor(w / 12)); // 字体大小根据图片宽度自适应
+        dCtx.font = `bold ${fontSize}px sans-serif`;
+        dCtx.fillStyle = '#ff0000';
+        dCtx.textAlign = 'center';
+        dCtx.textBaseline = 'middle';
+        
+        // 阴影描边增加冲击力
+        dCtx.strokeStyle = '#ffffff';
+        dCtx.lineWidth = Math.max(4, fontSize / 8);
+        dCtx.strokeText("不许下载！！！", w / 2, h / 2);
+        dCtx.fillText("不许下载！！！", w / 2, h / 2);
+
+        // 4. 将被摧毁的画布更新到界面上展示（嘲讽拉满）
+        const container = document.getElementById('restore-container');
+        container.innerHTML = '';
+        container.appendChild(destroyCanvas);
+
+        // 5. 强制触发恶搞图片的下载
+        const dataUrl = destroyCanvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `DONT_STEAL_IMAGE_${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // 6. 日志框同步报错
+        const logBox = document.getElementById('restore-log');
+        logBox.innerHTML = "<span style='color:#e74c3c; font-size:16px; font-weight:bold;'>警告：触发防盗机制！已对下载资源执行结构化毁灭，并盖戳：不许下载！！！</span>";
+    });
+
+    preventSteal(document.getElementById('scramble-container'));
+    preventSteal(document.getElementById('restore-container'));
+</script>
+</body>
+</html>
