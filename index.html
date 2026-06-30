@@ -92,7 +92,7 @@
             cursor: pointer;
         }
 
-        /* --- 手机端适配：批量新样式 --- */
+        /* --- 批量功能区域样式 --- */
         .batch-card {
             grid-column: 1 / -1; 
             background: #ffffff;
@@ -115,16 +115,16 @@
             border-radius: 4px;
             overflow: hidden;
             border: 1px solid #ddd;
+            transition: all 0.3s ease;
         }
         .batch-preview-item img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
-        .batch-btn-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
+        .batch-preview-item.active {
+            border: 3px solid #e67e22;
+            box-shadow: 0 0 8px rgba(230,126,34,0.5);
         }
     </style>
 </head>
@@ -136,33 +136,28 @@
     <div class="container">
         
         <div class="card batch-card">
-            <h2>✨ 手机/电脑 批量无损打散</h2>
+            <h2>✨ 手机/电脑 批量打散调度列表</h2>
             <label for="upload-batch" class="file-label" style="background:#2980b9;">
-                📁 1. 点击打开文件管理/内部存储多选照片
+                📁 第一步：点击打开内部存储多选多张图片
             </label>
             <input type="file" id="upload-batch" multiple>
             
             <div class="batch-preview-list" id="batch-preview-list" style="display: none;">
                 </div>
             
-            <div class="batch-btn-group">
-                <button class="btn" id="btn-batch-scramble" style="background-color: #34495e;" disabled>
-                    2. 批量打乱并缓存
-                </button>
-                <button class="btn btn-success" id="btn-batch-download" style="background-color: #7f8c8d;" disabled>
-                    3. 批量导出到本地
-                </button>
-            </div>
+            <button class="btn" id="btn-batch-next" style="background-color: #34495e;" disabled>
+                第二步：载入第一张图到下方处理
+            </button>
             
             <div id="batch-log" class="info-log" style="display:none;"></div>
         </div>
         <div class="card">
             <h2>1. 打散并隐写图片</h2>
-            <label for="upload-raw" class="file-label">选择原图上传</label>
+            <label for="upload-raw" class="file-label" id="label-upload-raw">选择原图上传</label>
             <input type="file" id="upload-raw" accept="image/*">
             
             <div class="preview-box" id="scramble-container">
-                <span style="color:#95a5a6;">等待上传原图...</span>
+                <span style="color:#95a5a6;">等待上传或从上方队列载入原图...</span>
             </div>
             
             <button class="btn" id="btn-scramble" disabled>点击打乱并埋入ID</button>
@@ -180,7 +175,7 @@
                 <span style="color:#95a5a6;">等待上传打散图...</span>
             </div>
             
-            <button class="btn btn-success" id="btn-restore" disabled>识别水印并还原图片</button>
+            <button class="btn" id="btn-restore" disabled>识别水印并还原图片</button>
             <button class="btn btn-danger" id="btn-fake-download" style="display:none;">下载还原后的图片</button>
             
             <div id="restore-log" class="info-log" style="display:none;"></div>
@@ -192,6 +187,10 @@
     let originalImage = null;
     let finalCanvasGlobal = null;
     let restoredCanvasGlobal = null; 
+
+    // --- 批量队列管理全局变量 ---
+    let batchQueue = [];       // 存放当前选中的所有图片文件对象
+    let currentFileName = "";  // 记录当前正在被单张逻辑处理的文件名
 
     // --- PRNG 伪随机发生器 ---
     function sfc32(a, b, c, d) {
@@ -318,22 +317,36 @@
         }, { passive: false });
     }
 
-    // --- 1. 单张打散与隐写逻辑 ---
-    document.getElementById('upload-raw').addEventListener('change', function(e) {
-        let reader = new FileReader();
-        reader.onload = function(event) {
-            originalImage = new Image();
-            originalImage.onload = function() {
-                const container = document.getElementById('scramble-container');
-                container.innerHTML = '';
-                container.appendChild(originalImage);
-                document.getElementById('btn-scramble').disabled = false;
-            }
-            originalImage.src = event.target.result;
+    // --- 1. 单张/调度载入打散与隐写逻辑 ---
+    // 提取公共的文件加载转换机制
+    function loadAndDisplayImage(fileSrc, fileName) {
+        currentFileName = fileName; // 记忆当前文件名，以便下载时对齐
+        originalImage = new Image();
+        originalImage.onload = function() {
+            const container = document.getElementById('scramble-container');
+            container.innerHTML = '';
+            container.appendChild(originalImage);
+            document.getElementById('btn-scramble').disabled = false;
+            
+            // 隐藏上张图的下载按钮，强迫用户点击当前图的“打乱并埋入ID”
+            document.getElementById('btn-download').style.display = 'none';
+            document.getElementById('scramble-log').style.display = 'none';
         }
-        reader.readAsDataURL(e.target.files[0]);
+        originalImage.src = fileSrc;
+    }
+
+    // 响应原生独立上传
+    document.getElementById('upload-raw').addEventListener('change', function(e) {
+        if(e.target.files.length === 0) return;
+        let reader = new FileReader();
+        let file = e.target.files[0];
+        reader.onload = function(event) {
+            loadAndDisplayImage(event.target.result, file.name);
+        }
+        reader.readAsDataURL(file);
     });
 
+    // 核心打乱点击
     document.getElementById('btn-scramble').addEventListener('click', function() {
         if (!originalImage) return;
         
@@ -348,21 +361,60 @@
 
             const logBox = document.getElementById('scramble-log');
             logBox.style.display = 'block';
-            logBox.innerHTML = `处理成功！<br>1. 图片切块已完成打乱<br>2. 完整加密ID已隐写覆盖至打散图中<br>ID: ${result.id}`;
+            logBox.innerHTML = `处理成功！<br>当前图片：${currentFileName || "未命名"}<br>1. 图片切块已完成打乱<br>2. 完整加密ID已隐写覆盖至打散图中<br>ID: ${result.id}`;
 
             document.getElementById('btn-download').style.display = 'block';
         }
     });
 
+    // 【核心联动改动】安全下载成功后，从队列中将该图片剔除
     document.getElementById('btn-download').addEventListener('click', function() {
         if (!finalCanvasGlobal) return;
         const dataUrl = finalCanvasGlobal.toDataURL('image/png');
         const a = document.createElement('a');
         a.href = dataUrl;
-        a.download = `secure_scrambled_${Date.now()}.png`;
+        
+        // 生成对应安全格式的保存名称
+        const baseName = currentFileName ? (currentFileName.substring(0, currentFileName.lastIndexOf('.')) || currentFileName) : `img_${Date.now()}`;
+        a.download = `secure_scrambled_${baseName}.png`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+
+        // --- 批量联动处理：如果当前图是从队列加载来的，下载成功即切除队列头部 ---
+        if (batchQueue.length > 0) {
+            // 1. 弹出已下载完毕的队列头部
+            batchQueue.shift(); 
+            
+            // 2. 更新批量状态栏
+            const logBox = document.getElementById('batch-log');
+            
+            // 3. 移除界面上对应的第一个缩略图 DOM 元素
+            const previewListContainer = document.getElementById('batch-preview-list');
+            if (previewListContainer.firstChild) {
+                previewListContainer.removeChild(previewListContainer.firstChild);
+            }
+
+            if (batchQueue.length > 0) {
+                logBox.innerHTML = `🎉 上张图无损导出成功！队列剩余 <b>${batchQueue.length}</b> 张照片。请点击上方按钮载入下一张。`;
+                
+                const btnNext = document.getElementById('btn-batch-next');
+                btnNext.disabled = false;
+                btnNext.style.backgroundColor = '#2ecc71';
+                btnNext.innerText = `载入下一张图片 (剩余 ${batchQueue.length} 张)`;
+            } else {
+                logBox.innerHTML = "🎉 所有选中的批量照片已全部处理并逐一安全落地，队列已完美清空！";
+                
+                const btnNext = document.getElementById('btn-batch-next');
+                btnNext.disabled = true;
+                btnNext.style.backgroundColor = '#34495e';
+                btnNext.innerText = "批量任务已全部完成";
+                previewListContainer.style.display = 'none';
+            }
+
+            // 清理当前单张临时状态，防止重复下载
+            document.getElementById('btn-download').style.display = 'none';
+        }
     });
 
 
@@ -510,34 +562,25 @@
     });
 
 
-    // =================== 核心改动：批量处理本地高速内存缓存逻辑 ===================
-    let batchFiles = [];
-    let processedCache = []; // 新增：用于在内存中存放打乱后的 { dataUrl, filename } 对象
-
+    // =================== 3. 批量多图队列调度调度逻辑（改动核心） ===================
     document.getElementById('upload-batch').addEventListener('change', function(e) {
         const originalFiles = Array.from(e.target.files);
         if (originalFiles.length === 0) return;
 
-        // 安全过滤图片格式
-        batchFiles = originalFiles.filter(file => file.type.startsWith('image/'));
+        // 安全过滤
+        batchQueue = originalFiles.filter(file => file.type.startsWith('image/'));
 
-        if (batchFiles.length === 0) {
-            alert("未在选中的文件中检测到有效图片格式！请重新选择。");
+        if (batchQueue.length === 0) {
+            alert("未在选中的文件中检测到有效图片！");
             return;
         }
-
-        // 重置状态
-        processedCache = [];
-        document.getElementById('btn-batch-download').disabled = true;
-        document.getElementById('btn-batch-download').style.backgroundColor = '#7f8c8d';
-        document.getElementById('btn-batch-download').innerText = "3. 批量导出到本地";
 
         const previewListContainer = document.getElementById('batch-preview-list');
         previewListContainer.innerHTML = '';
         previewListContainer.style.display = 'grid';
 
-        // 渲染选中原图缩略
-        batchFiles.forEach((file) => {
+        // 渲染缩略图预览列表
+        batchQueue.forEach((file) => {
             const reader = new FileReader();
             reader.onload = function(event) {
                 const div = document.createElement('div');
@@ -550,112 +593,43 @@
             reader.readAsDataURL(file);
         });
 
-        const btnScramble = document.getElementById('btn-batch-scramble');
-        btnScramble.disabled = false;
-        btnScramble.style.backgroundColor = '#3498db';
-        btnScramble.innerText = `2. 批量打乱 (${batchFiles.length}张)`;
+        const btnNext = document.getElementById('btn-batch-next');
+        btnNext.disabled = false;
+        btnNext.style.backgroundColor = '#3498db';
+        btnNext.innerText = `载入第一张图片 (共 ${batchQueue.length} 张)`;
         
         const logBox = document.getElementById('batch-log');
         logBox.style.display = 'block';
-        logBox.innerHTML = `已载入 ${batchFiles.length} 张照片。请点击“批量打乱并缓存”开始。`;
+        logBox.innerHTML = `已成功在调度仓缓存了 <b>${batchQueue.length}</b> 张照片。请点击下方“载入第一张”按钮开始单张击破处理。`;
     });
 
-    // 核心点击：批量打乱至内存
-    document.getElementById('btn-batch-scramble').addEventListener('click', async function() {
-        if (batchFiles.length === 0) return;
+    // 核心中转函数：从队列顶部抽出一张，注入下方的单张核心渲染系统
+    document.getElementById('btn-batch-next').addEventListener('click', function() {
+        if (batchQueue.length === 0) return;
 
-        const logBox = document.getElementById('batch-log');
-        logBox.innerHTML = "正在高速处理打散中，请勿关闭页面...";
+        const currentFile = batchQueue[0]; // 只看队列第一个，不删，等下载按钮点完再删
         
-        processedCache = []; // 清空可能残留的老缓存
-        let successCount = 0;
-
-        for (let i = 0; i < batchFiles.length; i++) {
-            const file = batchFiles[i];
-            logBox.innerHTML = `处理进度: (${i + 1}/${batchFiles.length}) 正在无损混淆 ${file.name}...`;
-            
-            try {
-                const img = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = e => {
-                        const image = new Image();
-                        image.onload = () => resolve(image);
-                        image.onerror = reject;
-                        image.src = e.target.result;
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
-
-                const result = processScrambleCore(img);
-                
-                if (result) {
-                    // 使用 toDataURL('image/png') 完美锁死每个通道像素值
-                    const dataUrl = result.canvas.toDataURL('image/png');
-                    const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-                    
-                    // 将处理完的数据存入内存变量，不写盘，不打包
-                    processedCache.push({
-                        dataUrl: dataUrl,
-                        filename: `scrambled_${cleanName}.png`
-                    });
-                    successCount++;
-                }
-            } catch (err) {
-                console.error(err);
-                logBox.innerHTML += `<br><span style='color:#e74c3c;'>文件 ${file.name} 转换失败，已跳过。</span>`;
-            }
+        // 激活当前预览项的高亮样式（增加手机视觉反馈）
+        const previewListContainer = document.getElementById('batch-preview-list');
+        if (previewListContainer.firstChild) {
+            previewListContainer.firstChild.classList.add('active');
         }
-
-        if (successCount > 0) {
-            logBox.innerHTML = `✨ 批量混淆完成！已安全缓存 <b>${successCount}</b> 张无损图到内存中。<br>请点击右侧的<b>“批量导出到本地”</b>将其保存到手机。`;
-            
-            // 激活无损导出按钮
-            const btnDownload = document.getElementById('btn-batch-download');
-            btnDownload.disabled = false;
-            btnDownload.style.backgroundColor = '#2ecc71';
-            btnDownload.innerText = `3. 批量导出 (${successCount}张)`;
-        } else {
-            logBox.innerHTML = "<span style='color:#e74c3c;'>处理完毕，未能成功混淆任何图片。</span>";
-        }
-    });
-
-    // 核心点击：一张张串行触发浏览器原生下载，之后清空缓存
-    document.getElementById('btn-batch-download').addEventListener('click', function() {
-        if (processedCache.length === 0) return;
 
         const logBox = document.getElementById('batch-log');
-        logBox.innerHTML = "正在通过浏览器原生安全通道依次下载图片...";
+        logBox.innerHTML = `⏳ 正在将 <b>${currentFile.name}</b> 送去单张编辑区...`;
 
-        // 串行循环触发原生下载（设置微弱延时，防止部分手机浏览器为了防弹窗而吞掉部分下载）
-        processedCache.forEach((item, index) => {
-            setTimeout(() => {
-                const a = document.createElement('a');
-                a.href = item.dataUrl;
-                a.download = item.filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-
-                logBox.innerHTML = `正在保存第 (${index + 1}/${processedCache.length}) 张图片...`;
-
-                // 当最后一张触发完成，彻底释放内存清空缓存
-                if (index === processedCache.length - 1) {
-                    logBox.innerHTML = `🎉 批量无损导出成功！所有图片已依次通过系统原生通道保存。<br>内存缓存已全部清空，避免占用手机内存。`;
-                    
-                    // 清空并使按钮失效
-                    processedCache = [];
-                    batchFiles = [];
-                    document.getElementById('btn-batch-download').disabled = true;
-                    document.getElementById('btn-batch-download').style.backgroundColor = '#7f8c8d';
-                    document.getElementById('btn-batch-download').innerText = "3. 批量导出到本地";
-                    document.getElementById('btn-batch-scramble').disabled = true;
-                    document.getElementById('btn-batch-scramble').innerText = "2. 批量打乱并缓存";
-                    document.getElementById('batch-preview-list').style.display = 'none';
-                    document.getElementById('batch-preview-list').innerHTML = '';
-                }
-            }, index * 400); // 400毫秒延迟，对手机浏览器极其友好，确保每张都能安全落地
-        });
+        // 读取该项文件数据流并派发给原单张处理管道
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            loadAndDisplayImage(event.target.result, currentFile.name);
+            
+            logBox.innerHTML = `🎯 载入完毕！当前正在处理：<b>${currentFile.name}</b>。<br>请在下方的“1. 打散并隐写图片”卡片中，点击<b>“点击打乱并埋入ID”</b>，接着点击<b>“安全下载打散图”</b>。成功下载后它会自动从列表中移除！`;
+            
+            // 锁定自身防止混乱输入，等用户下载完或者走完流程
+            document.getElementById('btn-batch-next').disabled = true;
+            document.getElementById('btn-batch-next').style.backgroundColor = '#7f8c8d';
+        }
+        reader.readAsDataURL(currentFile);
     });
 
     preventSteal(document.getElementById('scramble-container'));
