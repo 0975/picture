@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>图片先打散后隐写系统</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -122,6 +121,11 @@
             height: 100%;
             object-fit: cover;
         }
+        .batch-btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
     </style>
 </head>
 <body>
@@ -132,18 +136,23 @@
     <div class="container">
         
         <div class="card batch-card">
-            <h2>✨ 手机/电脑 批量打散并打包</h2>
+            <h2>✨ 手机/电脑 批量无损打散</h2>
             <label for="upload-batch" class="file-label" style="background:#2980b9;">
-                📁 点击打开文件管理/内部存储多选照片
+                📁 1. 点击打开文件管理/内部存储多选照片
             </label>
             <input type="file" id="upload-batch" multiple>
             
             <div class="batch-preview-list" id="batch-preview-list" style="display: none;">
                 </div>
             
-            <button class="btn" id="btn-batch-scramble" style="background-color: #34495e;" disabled>
-                一键批量打乱并导出 ZIP 包
-            </button>
+            <div class="batch-btn-group">
+                <button class="btn" id="btn-batch-scramble" style="background-color: #34495e;" disabled>
+                    2. 批量打乱并缓存
+                </button>
+                <button class="btn btn-success" id="btn-batch-download" style="background-color: #7f8c8d;" disabled>
+                    3. 批量导出到本地
+                </button>
+            </div>
             
             <div id="batch-log" class="info-log" style="display:none;"></div>
         </div>
@@ -179,7 +188,7 @@
     </div>
 
 <script>
-    const GRID_SIZE = 64; // 16x16 网格 (每行每列切块数)
+    const GRID_SIZE = 64; // 16x16 网格
     let originalImage = null;
     let finalCanvasGlobal = null;
     let restoredCanvasGlobal = null; 
@@ -501,14 +510,15 @@
     });
 
 
-    // =================== 批量处理异步安全过滤逻辑 ===================
+    // =================== 核心改动：批量处理本地高速内存缓存逻辑 ===================
     let batchFiles = [];
+    let processedCache = []; // 新增：用于在内存中存放打乱后的 { dataUrl, filename } 对象
 
     document.getElementById('upload-batch').addEventListener('change', function(e) {
         const originalFiles = Array.from(e.target.files);
         if (originalFiles.length === 0) return;
 
-        // 【安全拦截】：通过文件 MIME 类型过滤，只保留图片
+        // 安全过滤图片格式
         batchFiles = originalFiles.filter(file => file.type.startsWith('image/'));
 
         if (batchFiles.length === 0) {
@@ -516,11 +526,17 @@
             return;
         }
 
+        // 重置状态
+        processedCache = [];
+        document.getElementById('btn-batch-download').disabled = true;
+        document.getElementById('btn-batch-download').style.backgroundColor = '#7f8c8d';
+        document.getElementById('btn-batch-download').innerText = "3. 批量导出到本地";
+
         const previewListContainer = document.getElementById('batch-preview-list');
         previewListContainer.innerHTML = '';
         previewListContainer.style.display = 'grid';
 
-        // 渲染安全过滤后的缩略图
+        // 渲染选中原图缩略
         batchFiles.forEach((file) => {
             const reader = new FileReader();
             reader.onload = function(event) {
@@ -536,26 +552,27 @@
 
         const btnScramble = document.getElementById('btn-batch-scramble');
         btnScramble.disabled = false;
-        btnScramble.style.backgroundColor = '#2ecc71';
-        btnScramble.innerText = `点击批量打乱 ${batchFiles.length} 张图片并打包`;
+        btnScramble.style.backgroundColor = '#3498db';
+        btnScramble.innerText = `2. 批量打乱 (${batchFiles.length}张)`;
         
         const logBox = document.getElementById('batch-log');
         logBox.style.display = 'block';
-        logBox.innerHTML = `已从文件管理器载入 ${batchFiles.length} 张照片，等待打包处理。`;
+        logBox.innerHTML = `已载入 ${batchFiles.length} 张照片。请点击“批量打乱并缓存”开始。`;
     });
 
+    // 核心点击：批量打乱至内存
     document.getElementById('btn-batch-scramble').addEventListener('click', async function() {
         if (batchFiles.length === 0) return;
 
         const logBox = document.getElementById('batch-log');
-        logBox.innerHTML = "正在开始批量多线程处理，请稍候...";
+        logBox.innerHTML = "正在高速处理打散中，请勿关闭页面...";
         
-        const zip = new JSZip();
+        processedCache = []; // 清空可能残留的老缓存
         let successCount = 0;
 
         for (let i = 0; i < batchFiles.length; i++) {
             const file = batchFiles[i];
-            logBox.innerHTML = `正在处理第 (${i + 1}/${batchFiles.length}) 张: ${file.name}...`;
+            logBox.innerHTML = `处理进度: (${i + 1}/${batchFiles.length}) 正在无损混淆 ${file.name}...`;
             
             try {
                 const img = await new Promise((resolve, reject) => {
@@ -570,40 +587,75 @@
                     reader.readAsDataURL(file);
                 });
 
-                // 调用核心打散封装逻辑
                 const result = processScrambleCore(img);
                 
                 if (result) {
+                    // 使用 toDataURL('image/png') 完美锁死每个通道像素值
                     const dataUrl = result.canvas.toDataURL('image/png');
-                    const base64Data = dataUrl.split(',')[1];
-                    
-                    // 统一规范命名，打包输出为PNG
                     const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-                    zip.file(`scrambled_${cleanName}.png`, base64Data, {base64: true});
+                    
+                    // 将处理完的数据存入内存变量，不写盘，不打包
+                    processedCache.push({
+                        dataUrl: dataUrl,
+                        filename: `scrambled_${cleanName}.png`
+                    });
                     successCount++;
                 }
             } catch (err) {
-                console.error(`混淆失败: ${file.name}`, err);
-                logBox.innerHTML += `<br><span style='color:#e74c3c;'>文件 ${file.name} 破损或格式不支持，已跳过。</span>`;
+                console.error(err);
+                logBox.innerHTML += `<br><span style='color:#e74c3c;'>文件 ${file.name} 转换失败，已跳过。</span>`;
             }
         }
 
         if (successCount > 0) {
-            logBox.innerHTML = `✨ 矩阵混淆隐写完毕 (${successCount}张)！正在压缩归档为 ZIP...`;
+            logBox.innerHTML = `✨ 批量混淆完成！已安全缓存 <b>${successCount}</b> 张无损图到内存中。<br>请点击右侧的<b>“批量导出到本地”</b>将其保存到手机。`;
             
-            zip.generateAsync({type: "blob"}).then(function(content) {
+            // 激活无损导出按钮
+            const btnDownload = document.getElementById('btn-batch-download');
+            btnDownload.disabled = false;
+            btnDownload.style.backgroundColor = '#2ecc71';
+            btnDownload.innerText = `3. 批量导出 (${successCount}张)`;
+        } else {
+            logBox.innerHTML = "<span style='color:#e74c3c;'>处理完毕，未能成功混淆任何图片。</span>";
+        }
+    });
+
+    // 核心点击：一张张串行触发浏览器原生下载，之后清空缓存
+    document.getElementById('btn-batch-download').addEventListener('click', function() {
+        if (processedCache.length === 0) return;
+
+        const logBox = document.getElementById('batch-log');
+        logBox.innerHTML = "正在通过浏览器原生安全通道依次下载图片...";
+
+        // 串行循环触发原生下载（设置微弱延时，防止部分手机浏览器为了防弹窗而吞掉部分下载）
+        processedCache.forEach((item, index) => {
+            setTimeout(() => {
                 const a = document.createElement('a');
-                a.href = URL.createObjectURL(content);
-                a.download = `batch_scrambled_${Date.now()}.zip`;
+                a.href = item.dataUrl;
+                a.download = item.filename;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                
-                logBox.innerHTML = `🎉 成功！压缩包已安全保存至本地。<br>有效处理: ${successCount} 张<br>压缩包名: batch_scrambled_${Date.now()}.zip`;
-            });
-        } else {
-            logBox.innerHTML = "<span style='color:#e74c3c;'>处理完毕，没有成功转换任何图片。</span>";
-        }
+
+                logBox.innerHTML = `正在保存第 (${index + 1}/${processedCache.length}) 张图片...`;
+
+                // 当最后一张触发完成，彻底释放内存清空缓存
+                if (index === processedCache.length - 1) {
+                    logBox.innerHTML = `🎉 批量无损导出成功！所有图片已依次通过系统原生通道保存。<br>内存缓存已全部清空，避免占用手机内存。`;
+                    
+                    // 清空并使按钮失效
+                    processedCache = [];
+                    batchFiles = [];
+                    document.getElementById('btn-batch-download').disabled = true;
+                    document.getElementById('btn-batch-download').style.backgroundColor = '#7f8c8d';
+                    document.getElementById('btn-batch-download').innerText = "3. 批量导出到本地";
+                    document.getElementById('btn-batch-scramble').disabled = true;
+                    document.getElementById('btn-batch-scramble').innerText = "2. 批量打乱并缓存";
+                    document.getElementById('batch-preview-list').style.display = 'none';
+                    document.getElementById('batch-preview-list').innerHTML = '';
+                }
+            }, index * 400); // 400毫秒延迟，对手机浏览器极其友好，确保每张都能安全落地
+        });
     });
 
     preventSteal(document.getElementById('scramble-container'));
