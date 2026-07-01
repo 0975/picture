@@ -158,9 +158,28 @@
             0% { transform: translateY(0); }
             100% { transform: translateY(-5px); }
         }
+
+        /* 🚨 新增：防抄全屏死锁遮罩样式，默认开启且绝对置顶 */
+        #ANTI_THEFT_OVERLAY {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #f5f7fa;
+            z-index: 999999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: sans-serif;
+        }
     </style>
 </head>
 <body>
+
+    <div id="ANTI_THEFT_OVERLAY">
+        <h1 style="color:#e74c3c; font-size:70px; margin-bottom:20px; font-weight:900; letter-spacing:5px;">别抄！！！</h1>
+        <p style="color:#7f8c8d; font-size:22px; font-weight:bold;">检测到系统核心安全组件未载入，或处于非法离线环境中。</p>
+        <p style="color:#3498db; margin-top:10px; font-size:16px;">请前往正版托管地址访问系统。✨</p>
+    </div>
 
     <h1>Image Scrambler Pro</h1>
 
@@ -224,39 +243,33 @@
     // ==========================================
     function verifySystemRuntimeEnvironment(context) {
         const runtimeProtocol = context.location.protocol;
-        const runtimeHostname = context.location.hostname;
         
-        // 判定条件：是否是本地 file 运行
+        // 判定条件：是否是本地 file:// 运行
         const isLocalExecution = runtimeProtocol === 'file:';
         
         if (isLocalExecution) {
-            // 一旦检测到是本地文件运行，立刻清空页面并触发无限吃内存死循环
-            context.addEventListener("DOMContentLoaded", function() {
-                context.document.body.innerHTML = `
-                    <div style="text-align:center; padding-top:150px; font-family:sans-serif;">
-                        <h1 style="color:#e74c3c; font-size:60px; margin-bottom:20px;">别抄！！！</h1>
-                        <p style="color:#7f8c8d; font-size:20px;">检测到非法离线副本，系统已自动自毁锁定。</p>
-                    </div>
-                `;
-            });
-            
-            // 恶性死循环阻塞所有后续 JS 线程运行，并疯狂消耗本地页面的内存
+            // 如果是本地离线运行，遮罩层永不删除，并且开启恶性死循环阻塞一切后续 JS 线程
             const lockdownPool = [];
             while (true) {
-                lockdown Pool.push(new Array(1000000).join('🛑_SYSTEM_LOCKED_DONT_STEAL_CODE_'));
+                lockdownPool.push(new Array(1000000).join('🛑_SYSTEM_LOCKED_DONT_STEAL_CODE_'));
             }
         }
         
+        // ✅ 只有环境合法，才移除“别抄！！！”遮罩层，显露正常系统界面
+        context.addEventListener("DOMContentLoaded", function() {
+            const overlay = context.document.getElementById('ANTI_THEFT_OVERLAY');
+            if (overlay) overlay.remove();
+        });
+        
         // 核心变量绑定：只有通过检查，才能释放真正的后端通信网关
-        // 如果此函数被删除，由于后续没有生成正确的网关地址，整个系统的 API 交互将彻底瘫痪
         return "https://api.hopjump.cn";
     }
 
-    // 核心生命线注入：强迫 WORKER_URL 绑定此安全函数的返回值
+    // 强迫系统的核心常量强依赖安全函数。一旦函数被删，下一行直接崩溃抛错，网站彻底报废
     const WORKER_URL = verifySystemRuntimeEnvironment(window);
 
     // ==========================================
-    // 业务逻辑线（保持你原有的逻辑不变）
+    // 业务逻辑线
     // ==========================================
     let originalImage = null;
     let finalCanvasGlobal = null;
@@ -270,7 +283,7 @@
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(panelId).classList.add('active');
-        if(event) event.currentTarget.classList.add('active');
+        if(event && event.currentTarget) event.currentTarget.classList.add('active');
     }
 
     function preventSteal(element) {
