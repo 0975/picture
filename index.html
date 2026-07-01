@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>图片先打散后隐写系统</title>
+    <title>图片先打散后隐写系统 (Cloudflare 云端拦截版)</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -144,7 +145,7 @@
 <body>
 
     <h1>Image Scrambler (Post-Steganography)</h1>
-    <p style="text-align:center; color: #7f8c8d;">逻辑重构：先打乱切片 ──► 再整体隐写 ID ──► 完美无损还原</p>
+    <p style="text-align:center; color: #7f8c8d;">逻辑重构：先打乱切片 ──► 再整体隐写 ID ──► 完美无损还原与云端鉴权</p>
 
     <div class="container">
         
@@ -205,6 +206,10 @@
     let originalImage = null;
     let finalCanvasGlobal = null;
     let restoredCanvasGlobal = null; 
+
+    // 🚀【核心配置】请将下方换成你实际部署的 Cloudflare Worker 域名（保留最后的 / 即可）
+    // 🚀 将这一行修改为你刚刚在 CF 里绑定的自定义域名
+const WORKER_URL = "https://api.hopjump.cn/";
 
     // PRNG 伪随机发生器
     function sfc32(a, b, c, d) {
@@ -379,7 +384,7 @@
     });
 
 
-    // 2. 识别并逆向还原（重点修改：预览框文字注入与内存安全释放）
+    // 2. 识别并逆向还原 (对接 Cloudflare 鉴权)
     let scrambledImageForRestore = null;
 
     document.getElementById('upload-scrambled').addEventListener('change', function(e) {
@@ -399,7 +404,7 @@
         reader.readAsDataURL(e.target.files[0]);
     });
 
-    document.getElementById('btn-restore').addEventListener('click', function() {
+    document.getElementById('btn-restore').addEventListener('click', async function() {
         if (!scrambledImageForRestore) return;
 
         const w = scrambledImageForRestore.width;
@@ -423,33 +428,40 @@
             return;
         }
 
-        // =================== 检测是否已看过 ===================
-        let viewedIds = JSON.parse(localStorage.getItem('viewed_image_ids') || '[]');
-        if (viewedIds.includes(extractedID)) {
-            // 1. 彻底清空预览框内的旧图片数据（内存安全释放）
-            container.innerHTML = '';
-            
-            // 2. 在预览框内直接建立文本节点显示嘲讽
-            const warningDiv = document.createElement('div');
-            warningDiv.className = 'warning-text';
-            warningDiv.innerHTML = "💥 你已经看过一次还想看第二次？！<br>杂鱼~ 💨";
-            container.appendChild(warningDiv);
-
-            // 3. 状态日志框同步更新，并封锁下载按钮
-            logBox.innerHTML = "<span style='color:#e74c3c; font-weight:bold;'>检测到重复访问！解密行为已被强制拦截。</span>";
-            document.getElementById('btn-fake-download').style.display = 'none';
-            return; 
-        }
+        logBox.innerHTML = "📡 正在向 Cloudflare 数据库验证特征凭证...";
 
         try {
+            // 组装带参数的 GET 请求 URL
+            const finalRequestUrl = `${WORKER_URL}?id=${encodeURIComponent(extractedID)}`;
+            const response = await fetch(finalRequestUrl, { method: "GET" });
+
+            if (!response.ok) {
+                throw new Error(`Cloudflare 响应异常，状态码: ${response.status}`);
+            }
+
+            const resData = await response.json();
+
+            // =================== Cloudflare 云端查重查获 ===================
+            if (resData.exists === true) {
+                // 1. 彻底清空预览框内的旧图片数据
+                container.innerHTML = '';
+                
+                // 2. 在预览框内直接建立文本节点显示嘲讽
+                const warningDiv = document.createElement('div');
+                warningDiv.className = 'warning-text';
+                warningDiv.innerHTML = "💥 你已经看过一次还想看第二次？！<br>杂鱼~ 💨";
+                container.appendChild(warningDiv);
+
+                // 3. 状态日志框同步更新，并封锁下载按钮
+                logBox.innerHTML = "<span style='color:#e74c3c; font-weight:bold;'>【云端同步拦截】检测到重复访问！解密行为已被强行终止。</span>";
+                document.getElementById('btn-fake-download').style.display = 'none';
+                return; 
+            }
+
+            // 首次解码成功，放行执行还原
+            logBox.innerHTML = `[首次解锁成功] 凭证已录入云端。获取种子密码中...<br>正在执行逆向矩阵还原...`;
+
             const config = JSON.parse(atob(extractedID));
-            
-            // 首次解码成功，存盘入库
-            viewedIds.push(extractedID);
-            localStorage.setItem('viewed_image_ids', JSON.stringify(viewedIds));
-
-            logBox.innerHTML = `成功提取连续ID: ${extractedID}<br>获取种子密码: ${config.seed}<br>正在执行逆向矩阵还原...`;
-
             const restoreCanvas = document.createElement('canvas');
             restoreCanvas.width = w;
             restoreCanvas.height = h;
@@ -483,7 +495,7 @@
             document.getElementById('btn-fake-download').style.display = 'block'; 
 
         } catch(err) {
-            logBox.innerHTML = "<span style='color:#e74c3c;'>解析错误：虽然提取到了密文，但 Base64 数据由于像素偏差损坏。</span>";
+            logBox.innerHTML = `<span style='color:#e74c3c;'>云端鉴权失败：无法连接到伪后端。原因: ${err.message}</span>`;
             console.error(err);
         }
     });
