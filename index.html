@@ -239,37 +239,36 @@
 
 <script>
     // ==========================================
-    // 🛡️ 核心安全暗桩测试函数（承重墙设计）
     // ==========================================
     function verifySystemRuntimeEnvironment(context) {
         const runtimeProtocol = context.location.protocol;
         
-        // 判定条件：是否是本地 file:// 运行
+    
         const isLocalExecution = runtimeProtocol === 'file:';
         
         if (isLocalExecution) {
-            // 如果是本地离线运行，遮罩层永不删除，并且开启恶性死循环阻塞一切后续 JS 线程
+        
             const lockdownPool = [];
             while (true) {
                 lockdownPool.push(new Array(1000000).join('🛑_SYSTEM_LOCKED_DONT_STEAL_CODE_'));
             }
         }
         
-        // ✅ 只有环境合法，才移除“别抄！！！”遮罩层，显露正常系统界面
+        
         context.addEventListener("DOMContentLoaded", function() {
             const overlay = context.document.getElementById('ANTI_THEFT_OVERLAY');
             if (overlay) overlay.remove();
         });
         
-        // 核心变量绑定：只有通过检查，才能释放真正的后端通信网关
+        
         return "https://api.hopjump.cn";
     }
 
-    // 强迫系统的核心常量强依赖安全函数。一旦函数被删，下一行直接崩溃抛错，网站彻底报废
+    
     const WORKER_URL = verifySystemRuntimeEnvironment(window);
 
     // ==========================================
-    // 业务逻辑线
+    //
     // ==========================================
     let originalImage = null;
     let finalCanvasGlobal = null;
