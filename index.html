@@ -9,37 +9,21 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #f5f7fa;
             color: #333;
-            padding: 30px 15px;
-            max-width: 800px;
+            padding: 40px 20px;
+            max-width: 1000px;
             margin: 0 auto;
         }
-        h1 { text-align: center; color: #2c3e50; font-size: 24px; margin-bottom: 25px; }
-        .nav-tabs {
+        h1, h2 { text-align: center; color: #2c3e50; }
+        .container {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin-bottom: 25px;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
         }
-        .nav-btn {
-            background-color: #ffffff;
-            color: #555;
-            border: 2px solid #e2e8f0;
-            padding: 15px 5px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 10px;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.2s ease;
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+            body { padding: 15px 10px; }
         }
-        .nav-btn.active {
-            background-color: #3498db;
-            color: white;
-            border-color: #3498db;
-            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.25);
-        }
-        .panel { display: none; }
-        .panel.active { display: block; }
         .card {
             background: white;
             border-radius: 12px;
@@ -47,7 +31,6 @@
             box-shadow: 0 4px 16px rgba(0,0,0,0.06);
             margin-bottom: 20px;
         }
-        h2 { font-size: 18px; margin-top: 0; color: #2c3e50; border-left: 4px solid #3498db; padding-left: 10px; text-align: left; }
         .btn {
             background-color: #3498db;
             color: white;
@@ -59,10 +42,8 @@
             width: 100%;
             margin-top: 15px;
             transition: background 0.2s;
-            font-weight: bold;
         }
         .btn:hover { background-color: #2980b9; }
-        .btn:disabled { background-color: #bdc3c7; cursor: not-allowed; }
         .btn-success { background-color: #2ecc71; }
         .btn-success:hover { background-color: #27ae60; }
         .btn-danger { background-color: #e74c3c; }
@@ -109,43 +90,43 @@
             padding: 12px;
             border-radius: 6px;
             cursor: pointer;
-            font-weight: bold;
         }
-        .batch-queue-container {
-            background: #f8f9fa;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 12px;
-            margin-top: 15px;
+
+        /* 手机端适配：批量新样式 */
+        .batch-card {
+            grid-column: 1 / -1; 
+            background: #ffffff;
+            border: 2px solid #3498db;
         }
-        .batch-queue-title { font-size: 13px; color: #7f8c8d; margin-bottom: 8px; font-weight: 500; }
         .batch-preview-list {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
             gap: 10px;
-            overflow-x: auto;
-            padding-bottom: 5px;
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 5px;
+            background: #f8f9fa;
+            border-radius: 6px;
         }
         .batch-preview-item {
             position: relative;
-            width: 75px;
-            height: 75px;
-            border-radius: 6px;
+            aspect-ratio: 1;
+            border-radius: 4px;
             overflow: hidden;
-            border: 2px solid #ddd;
-            flex-shrink: 0;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .batch-preview-item:hover { border-color: #3498db; }
-        .batch-preview-item.active-item {
-            border-color: #e67e22;
-            box-shadow: 0 0 6px rgba(230, 126, 34, 0.6);
+            border: 1px solid #ddd;
         }
         .batch-preview-item img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
+        .batch-btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        /* 拦截提示的专属酷炫样式 */
         .warning-text {
             color: #e74c3c;
             font-size: 18px;
@@ -162,99 +143,196 @@
 </head>
 <body>
 
-    <h1>Image Scrambler Pro</h1>
+    <h1>Image Scrambler (Post-Steganography)</h1>
+    <p style="text-align:center; color: #7f8c8d;">逻辑重构：先打乱切片 ──► 再整体隐写 ID ──► 完美无损还原</p>
 
-    <div class="nav-tabs">
-        <div class="nav-btn active" onclick="switchPanel(event, 'single-panel')">🖼️ 打散单张</div>
-        <div class="nav-btn" onclick="switchPanel(event, 'batch-panel')">🗂️ 批量队列</div>
-        <div class="nav-btn" onclick="switchPanel(event, 'restore-panel')">🔓 识别还原</div>
-    </div>
+    <div class="container">
+        
+        <div class="card batch-card">
+            <h2>✨ 手机/电脑 批量无损打散</h2>
+            <label for="upload-batch" class="file-label" style="background:#2980b9;">
+                📁 1. 点击打开文件管理/内部存储多选照片
+            </label>
+            <input type="file" id="upload-batch" multiple>
+            
+            <div class="batch-preview-list" id="batch-preview-list" style="display: none;"></div>
+            
+            <div class="batch-btn-group">
+                <button class="btn" id="btn-batch-scramble" style="background-color: #34495e;" disabled>
+                    2. 批量打乱并缓存
+                </button>
+                <button class="btn btn-success" id="btn-batch-download" style="background-color: #7f8c8d;" disabled>
+                    3. 批量导出到本地
+                </button>
+            </div>
+            
+            <div id="batch-log" class="info-log" style="display:none;"></div>
+        </div>
 
-    <div id="single-panel" class="panel active">
         <div class="card">
             <h2>1. 打散并隐写图片</h2>
             <label for="upload-raw" class="file-label">选择原图上传</label>
             <input type="file" id="upload-raw" accept="image/*">
+            
             <div class="preview-box" id="scramble-container">
                 <span style="color:#95a5a6;">等待上传原图...</span>
             </div>
+            
             <button class="btn" id="btn-scramble" disabled>点击打乱并埋入ID</button>
             <button class="btn btn-success" id="btn-download" style="display:none;">安全下载打散图</button>
+            
             <div id="scramble-log" class="info-log" style="display:none;"></div>
         </div>
-    </div>
 
-    <div id="batch-panel" class="panel">
-        <div class="card" style="border: 2px solid #3498db;">
-            <h2>2. 批量导入与自动出队打散</h2>
-            <label for="upload-batch" class="file-label" style="background:#2980b9;">📁 点击打开文件管理多选导入照片</label>
-            <input type="file" id="upload-batch" multiple>
-            <div class="batch-queue-container" id="batch-queue-area" style="display: none;">
-                <div class="batch-queue-title" id="queue-count-title">📌 待处理队列:</div>
-                <div class="batch-preview-list" id="batch-preview-list"></div>
-            </div>
-            <hr style="border: 0; border-top: 1px dashed #cbd5e1; margin: 25px 0 15px 0;">
-            <div class="batch-queue-title" style="color: #2c3e50; font-weight: bold; font-size: 14px;">🛠️ 选中图片打散工作台：</div>
-            <div class="preview-box" id="batch-scramble-container">
-                <span style="color:#95a5a6;">请在上方队列选择或直接点击图片导入...</span>
-            </div>
-            <button class="btn" id="btn-batch-scramble" disabled>点击打乱并埋入ID</button>
-            <button class="btn btn-success" id="btn-batch-download" style="display:none;">安全下载打散图 (下载后自动出队销毁)</button>
-            <div id="batch-log" class="info-log" style="display:none;"></div>
-        </div>
-    </div>
-
-    <div id="restore-panel" class="panel">
         <div class="card">
-            <h2>3. 识别并逆向还原</h2>
+            <h2>2. 识别并逆向还原</h2>
             <label for="upload-scrambled" class="file-label" style="background:#9b59b6;">上传打散的PNG图片</label>
             <input type="file" id="upload-scrambled" accept="image/png">
+            
             <div class="preview-box" id="restore-container">
                 <span style="color:#95a5a6;">等待上传打散图...</span>
             </div>
+            
             <button class="btn btn-success" id="btn-restore" disabled>识别水印并还原图片</button>
             <button class="btn btn-danger" id="btn-fake-download" style="display:none;">下载还原后的图片</button>
+            
             <div id="restore-log" class="info-log" style="display:none;"></div>
         </div>
     </div>
 
 <script>
+    const GRID_SIZE = 64; 
     let originalImage = null;
     let finalCanvasGlobal = null;
     let restoredCanvasGlobal = null; 
-    let batchQueue = []; 
-    let currentQueueIndex = -1; 
-    let batchSelectedImage = null;
-    let batchFinalCanvasGlobal = null;
 
-    const WORKER_URL = "https://api.hopjump.cn"; 
-
-    // 修复后的切换Panel函数，安全显式接收事件参数
-    function switchPanel(e, panelId) {
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        
-        const targetPanel = document.getElementById(panelId);
-        if (targetPanel) targetPanel.classList.add('active');
-        
-        if (e && e.currentTarget) {
-            e.currentTarget.classList.add('active');
-        } else if (window.event && window.event.srcElement) {
-            window.event.srcElement.classList.add('active');
+    // PRNG 伪随机发生器
+    function sfc32(a, b, c, d) {
+        return function() {
+            a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+            var t = (a + b) | 0;
+            a = b ^ (b >>> 9);
+            b = (c + (c << 3)) | 0;
+            c = (c << 21) | (c >>> 11);
+            d = (d + 1) | 0;
+            t = (t + d) | 0;
+            c = (c + t) | 0;
+            return (t >>> 0) / 4294967296;
         }
+    }
+    function createRandomPairs(seed, length) {
+        let rand = sfc32(seed, 0x9E3779B9, 0x243F6A88, btoa(seed).charCodeAt(0));
+        let arr = Array.from({length}, (_, i) => i);
+        for (let i = length - 1; i > 0; i--) {
+            const j = Math.floor(rand() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    // LSB 隐写术核心
+    function embedWatermark(imageData, text) {
+        let textBin = "";
+        for (let i = 0; i < text.length; i++) {
+            textBin += text.charCodeAt(i).toString(2).padStart(8, '0');
+        }
+        let lenBin = textBin.length.toString(2).padStart(16, '0');
+        let binaryStr = lenBin + textBin;
+
+        let data = imageData.data;
+        if (binaryStr.length > data.length / 4) {
+            alert("错误：图片像素不足以容纳该长度的ID！");
+            return false;
+        }
+
+        for (let i = 0; i < binaryStr.length; i++) {
+            let bit = parseInt(binaryStr[i]);
+            data[i * 4] = (data[i * 4] & 0xFE) | bit; 
+        }
+        return true;
+    }
+
+    // 复用的核心打乱与隐写逻辑
+    function processScrambleCore(imgElement) {
+        const blockW = Math.floor(imgElement.width / GRID_SIZE);
+        const blockH = Math.floor(imgElement.height / GRID_SIZE);
+        const imgWidth = blockW * GRID_SIZE;
+        const imgHeight = blockH * GRID_SIZE;
+
+        const rawCanvas = document.createElement('canvas');
+        rawCanvas.width = imgWidth;
+        rawCanvas.height = imgHeight;
+        const rawCtx = rawCanvas.getContext('2d');
+        rawCtx.drawImage(imgElement, 0, 0, imgWidth, imgHeight);
+
+        const scrambledCanvas = document.createElement('canvas');
+        scrambledCanvas.width = imgWidth;
+        scrambledCanvas.height = imgHeight;
+        const sCtx = scrambledCanvas.getContext('2d');
+
+        const seed = Math.floor(Math.random() * 1000000);
+        const configObject = { seed: seed, grid: GRID_SIZE };
+        const scrambledID = btoa(JSON.stringify(configObject)); 
+
+        const totalBlocks = GRID_SIZE * GRID_SIZE;
+        const shuffleMap = createRandomPairs(seed, totalBlocks);
+
+        for (let i = 0; i < totalBlocks; i++) {
+            const srcIdx = i;
+            const destIdx = shuffleMap[i];
+
+            const srcX = (srcIdx % GRID_SIZE) * blockW;
+            const srcY = Math.floor(srcIdx / GRID_SIZE) * blockH;
+            const destX = (destIdx % GRID_SIZE) * blockW;
+            const destY = Math.floor(destIdx / GRID_SIZE) * blockH;
+
+            sCtx.drawImage(rawCanvas, srcX, srcY, blockW, blockH, destX, destY, blockW, blockH);
+        }
+
+        let scrambledImgData = sCtx.getImageData(0, 0, imgWidth, imgHeight);
+        const success = embedWatermark(scrambledImgData, scrambledID);
+        
+        if (success) {
+            sCtx.putImageData(scrambledImgData, 0, 0);
+            return { canvas: scrambledCanvas, id: scrambledID };
+        }
+        return null;
+    }
+
+    function extractWatermark(imageData) {
+        let data = imageData.data;
+        let lenBin = "";
+        for (let i = 0; i < 16; i++) {
+            lenBin += (data[i * 4] & 1).toString();
+        }
+        let totalBits = parseInt(lenBin, 2);
+        
+        if (isNaN(totalBits) || totalBits <= 0 || totalBits > data.length / 4) {
+            return null;
+        }
+
+        let textBin = "";
+        for (let i = 16; i < 16 + totalBits; i++) {
+            textBin += (data[i * 4] & 1).toString();
+        }
+
+        let result = "";
+        for (let i = 0; i < textBin.length; i += 8) {
+            let byte = textBin.substr(i, 8);
+            result += String.fromCharCode(parseInt(byte, 2));
+        }
+        return result;
     }
 
     function preventSteal(element) {
-        if (!element) return;
         element.addEventListener('contextmenu', e => e.preventDefault());
         element.addEventListener('touchstart', e => {
             if (e.touches.length > 1) e.preventDefault();
         }, { passive: false });
     }
 
-    // 单张上传逻辑
+    // 1. 单张打散与隐写
     document.getElementById('upload-raw').addEventListener('change', function(e) {
-        if (e.target.files.length === 0) return;
         let reader = new FileReader();
         reader.onload = function(event) {
             originalImage = new Image();
@@ -263,42 +341,29 @@
                 container.innerHTML = '';
                 container.appendChild(originalImage);
                 document.getElementById('btn-scramble').disabled = false;
-                document.getElementById('btn-download').style.display = 'none';
-                document.getElementById('scramble-log').style.display = 'none';
             }
             originalImage.src = event.target.result;
         }
         reader.readAsDataURL(e.target.files[0]);
     });
 
-    // 单张混淆
-    document.getElementById('btn-scramble').addEventListener('click', async function() {
+    document.getElementById('btn-scramble').addEventListener('click', function() {
         if (!originalImage) return;
-        const logBox = document.getElementById('scramble-log');
-        logBox.style.display = 'block';
-        logBox.innerHTML = "📡 正在向云端请求生成临时打散工作台...";
-        try {
-            const res = await fetch(`${WORKER_URL}/generate`);
-            if (!res.ok) throw new Error("获取云端服务失败");
-            const cloudData = await res.json();
+        
+        const result = processScrambleCore(originalImage);
+        if (result) {
+            const container = document.getElementById('scramble-container');
+            container.innerHTML = '';
+            container.appendChild(result.canvas);
+            preventSteal(result.canvas);
 
-            let temporaryWorkspace = new Function(cloudData.workerScript)();
-            const scrambledCanvas = temporaryWorkspace.scramble(originalImage, cloudData.seed, cloudData.id);
-            temporaryWorkspace = null;
+            finalCanvasGlobal = result.canvas;
 
-            if (scrambledCanvas) {
-                const container = document.getElementById('scramble-container');
-                container.innerHTML = '';
-                container.appendChild(scrambledCanvas);
-                preventSteal(scrambledCanvas);
-                finalCanvasGlobal = scrambledCanvas;
-                logBox.innerHTML = `处理成功！<br>已在动态生成的临时“内存密室”中完成打散与隐写。<br>核心算法已在做工结束后原地解散。`;
-                document.getElementById('btn-download').style.display = 'block';
-            } else {
-                logBox.innerHTML = `<span style="color:red">混淆失败：可能是图片像素不足。</span>`;
-            }
-        } catch (e) { 
-            logBox.innerHTML = `<span style="color:red">动态工作台组装失败: ${e.message}</span>`; 
+            const logBox = document.getElementById('scramble-log');
+            logBox.style.display = 'block';
+            logBox.innerHTML = `处理成功！<br>1. 图片切块已完成打乱<br>2. 完整加密ID已隐写覆盖至打散图中<br>ID: ${result.id}`;
+
+            document.getElementById('btn-download').style.display = 'block';
         }
     });
 
@@ -313,152 +378,11 @@
         document.body.removeChild(a);
     });
 
-    // 批量上传
-    document.getElementById('upload-batch').addEventListener('change', function(e) {
-        const originalFiles = Array.from(e.target.files);
-        if (originalFiles.length === 0) return;
-        const filteredFiles = originalFiles.filter(file => file.type.startsWith('image/'));
-        if (filteredFiles.length === 0) {
-            alert("未检测到有效图片文件，请重新选择！");
-            return;
-        }
-        batchQueue = [];
-        let loadedCount = 0;
-        filteredFiles.forEach((file) => {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                batchQueue.push({
-                    id: Math.random().toString(36).substr(2, 9),
-                    dataUrl: event.target.result,
-                    name: file.name.substring(0, file.name.lastIndexOf('.')) || file.name
-                });
-                loadedCount++;
-                if (loadedCount === filteredFiles.length) {
-                    renderQueueList();
-                    if (batchQueue.length > 0) {
-                        loadQueueItem(0);
-                    }
-                }
-            }
-            reader.readAsDataURL(file);
-        });
-    });
 
-    function renderQueueList() {
-        const container = document.getElementById('batch-preview-list');
-        const area = document.getElementById('batch-queue-area');
-        const title = document.getElementById('queue-count-title');
-        container.innerHTML = '';
-        if (batchQueue.length === 0) {
-            area.style.display = 'none';
-            resetWorkspace();
-            return;
-        }
-        area.style.display = 'block';
-        title.innerText = `📌 待处理队列 (剩余: ${batchQueue.length} 张):`;
-        batchQueue.forEach((item, index) => {
-            const div = document.createElement('div');
-            div.className = 'batch-preview-item';
-            if (index === currentQueueIndex) div.classList.add('active-item');
-            const img = document.createElement('img');
-            img.src = item.dataUrl;
-            div.appendChild(img);
-            div.onclick = function() {
-                loadQueueItem(index);
-            };
-            container.appendChild(div);
-        });
-    }
-
-    function loadQueueItem(index) {
-        if (index < 0 || index >= batchQueue.length) return;
-        currentQueueIndex = index;
-        const item = batchQueue[index];
-        document.querySelectorAll('.batch-preview-item').forEach((el, i) => {
-            if (i === index) el.classList.add('active-item');
-            else el.classList.remove('active-item');
-        });
-        batchSelectedImage = new Image();
-        batchSelectedImage.onload = function() {
-            const container = document.getElementById('batch-scramble-container');
-            container.innerHTML = '';
-            container.appendChild(batchSelectedImage);
-            document.getElementById('btn-batch-scramble').disabled = false;
-            document.getElementById('btn-batch-download').style.display = 'none';
-            document.getElementById('batch-log').style.display = 'none';
-            batchFinalCanvasGlobal = null;
-        }
-        batchSelectedImage.src = item.dataUrl;
-    }
-
-    function resetWorkspace() {
-        const container = document.getElementById('batch-scramble-container');
-        if(container) container.innerHTML = '<span style="color:#95a5a6;">队列已空，请重新导入照片...</span>';
-        document.getElementById('btn-batch-scramble').disabled = true;
-        document.getElementById('btn-batch-download').style.display = 'none';
-        document.getElementById('batch-log').style.display = 'none';
-        batchSelectedImage = null;
-        batchFinalCanvasGlobal = null;
-        currentQueueIndex = -1;
-    }
-
-    // 批量打散按钮事件
-    document.getElementById('btn-batch-scramble').addEventListener('click', async function() {
-        if (!batchSelectedImage) return;
-        const logBox = document.getElementById('batch-log');
-        logBox.style.display = 'block';
-        logBox.innerHTML = "📡 正在向云端调取独立批量临时组件...";
-        try {
-            const res = await fetch(`${WORKER_URL}/generate`);
-            if (!res.ok) throw new Error("云端组件响应错误");
-            const cloudData = await res.json();
-
-            let temporaryWorkspace = new Function(cloudData.workerScript)();
-            const scrambledCanvas = temporaryWorkspace.scramble(batchSelectedImage, cloudData.seed, cloudData.id);
-            temporaryWorkspace = null;
-
-            if (scrambledCanvas) {
-                const container = document.getElementById('batch-scramble-container');
-                container.innerHTML = '';
-                container.appendChild(scrambledCanvas);
-                preventSteal(scrambledCanvas);
-                batchFinalCanvasGlobal = scrambledCanvas;
-                logBox.innerHTML = `图层混淆成功！临时批量工具已自我清空销毁。`;
-                document.getElementById('btn-batch-download').style.display = 'block';
-            }
-        } catch (e) {
-            logBox.innerHTML = `<span style="color:red">批量处理失败: ${e.message}</span>`;
-        }
-    });
-
-    // 批量安全下载按钮事件
-    document.getElementById('btn-batch-download').addEventListener('click', function() {
-        if (!batchFinalCanvasGlobal || currentQueueIndex === -1) return;
-        const currentItem = batchQueue[currentQueueIndex];
-        const dataUrl = batchFinalCanvasGlobal.toDataURL('image/png');
-        const a = document.createElement('a');
-        a.href = dataUrl;
-        a.download = `scrambled_${currentItem.name}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        batchQueue.splice(currentQueueIndex, 1);
-        if (batchQueue.length > 0) {
-            if (currentQueueIndex >= batchQueue.length) {
-                currentQueueIndex = batchQueue.length - 1;
-            }
-            renderQueueList();
-            loadQueueItem(currentQueueIndex);
-        } else {
-            renderQueueList();
-        }
-    });
-
-    // 识别还原逻辑
+    // 2. 识别并逆向还原（重点修改：预览框文字注入与内存安全释放）
     let scrambledImageForRestore = null;
 
     document.getElementById('upload-scrambled').addEventListener('change', function(e) {
-        if (e.target.files.length === 0) return;
         let reader = new FileReader();
         reader.onload = function(event) {
             scrambledImageForRestore = new Image();
@@ -469,91 +393,116 @@
                 preventSteal(scrambledImageForRestore);
                 document.getElementById('btn-restore').disabled = false;
                 document.getElementById('btn-fake-download').style.display = 'none'; 
-                document.getElementById('restore-log').style.display = 'none';
             }
             scrambledImageForRestore.src = event.target.result;
         }
         reader.readAsDataURL(e.target.files[0]);
     });
 
-    // 逆向还原检测按钮事件
-    document.getElementById('btn-restore').addEventListener('click', async function() {
+    document.getElementById('btn-restore').addEventListener('click', function() {
         if (!scrambledImageForRestore) return;
+
         const w = scrambledImageForRestore.width;
         const h = scrambledImageForRestore.height;
+
         const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(scrambledImageForRestore, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const extractedID = extractWatermark(imgData);
 
         const logBox = document.getElementById('restore-log');
         const container = document.getElementById('restore-container');
         logBox.style.display = 'block';
-        logBox.innerHTML = "📡 正在下载临时盲读盲抠组件...";
+
+        if (!extractedID) {
+            logBox.innerHTML = "<span style='color:#e74c3c;'>解密失败：未在图片头部检测到完整的隐写数据。</span>";
+            return;
+        }
+
+        // =================== 检测是否已看过 ===================
+        let viewedIds = JSON.parse(localStorage.getItem('viewed_image_ids') || '[]');
+        if (viewedIds.includes(extractedID)) {
+            // 1. 彻底清空预览框内的旧图片数据（内存安全释放）
+            container.innerHTML = '';
+            
+            // 2. 在预览框内直接建立文本节点显示嘲讽
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'warning-text';
+            warningDiv.innerHTML = "💥 你已经看过一次还想看第二次？！<br>杂鱼~ 💨";
+            container.appendChild(warningDiv);
+
+            // 3. 状态日志框同步更新，并封锁下载按钮
+            logBox.innerHTML = "<span style='color:#e74c3c; font-weight:bold;'>检测到重复访问！解密行为已被强制拦截。</span>";
+            document.getElementById('btn-fake-download').style.display = 'none';
+            return; 
+        }
+
         try {
-            const initRes = await fetch(`${WORKER_URL}/restore`);
-            if (!initRes.ok) throw new Error("调取云端组件失败");
-            const initData = await initRes.json();
+            const config = JSON.parse(atob(extractedID));
+            
+            // 首次解码成功，存盘入库
+            viewedIds.push(extractedID);
+            localStorage.setItem('viewed_image_ids', JSON.stringify(viewedIds));
 
-            let temporaryWorkspace = new Function(initData.workerScript)();
-            const extractedID = temporaryWorkspace.extract(ctx, w, h);
-            temporaryWorkspace = null;
+            logBox.innerHTML = `成功提取连续ID: ${extractedID}<br>获取种子密码: ${config.seed}<br>正在执行逆向矩阵还原...`;
 
-            if (!extractedID) {
-                logBox.innerHTML = "<span style='color:#e74c3c;'>解密失败：未在图片中检测到有效的隐写暗语。</span>";
-                return;
+            const restoreCanvas = document.createElement('canvas');
+            restoreCanvas.width = w;
+            restoreCanvas.height = h;
+            const rCtx = restoreCanvas.getContext('2d');
+
+            const blockW = Math.floor(w / config.grid);
+            const blockH = Math.floor(h / config.grid);
+            const totalBlocks = config.grid * config.grid;
+
+            const shuffleMap = createRandomPairs(config.seed, totalBlocks);
+
+            for (let i = 0; i < totalBlocks; i++) {
+                const srcIdx = i; 
+                const destIdx = shuffleMap[i]; 
+
+                const srcX = (srcIdx % config.grid) * blockW;
+                const srcY = Math.floor(srcIdx / config.grid) * blockH;
+                const destX = (destIdx % config.grid) * blockW;
+                const destY = Math.floor(destIdx / config.grid) * blockH;
+
+                rCtx.drawImage(canvas, destX, destY, blockW, blockH, srcX, srcY, blockW, blockH);
             }
 
-            logBox.innerHTML = "📡 成功抠出特征暗语，正在将其发送至云端请求二次查重鉴权...";
-            const finalRequestUrl = `${WORKER_URL}/restore?id=${encodeURIComponent(extractedID)}`;
-            const response = await fetch(finalRequestUrl, { method: "GET" });
-            if (!response.ok) throw new Error("云端拒绝了本次鉴权请求");
-            const resData = await response.json();
+            container.innerHTML = '';
+            container.appendChild(restoreCanvas);
+            preventSteal(restoreCanvas);
+            
+            restoredCanvasGlobal = restoreCanvas; 
 
-            if (resData.intercepted === true) {
-                container.innerHTML = '';
-                const warningDiv = document.createElement('div');
-                warningDiv.className = 'warning-text';
-                warningDiv.innerHTML = "💥 你已经看过一次还想看第二次？！<br>杂鱼~ 💨";
-                container.appendChild(warningDiv);
-                logBox.innerHTML = "<span style='color:#e74c3c; font-weight:bold;'>【云端拦截】检测到非首次访问！还原算法已被拒绝下发。</span>";
-                document.getElementById('btn-fake-download').style.display = 'none';
-                return; 
-            }
+            logBox.innerHTML += "<br><span style='color:#2ecc71;'>恭喜！图片已完美逆向还原。</span>";
+            document.getElementById('btn-fake-download').style.display = 'block'; 
 
-            logBox.innerHTML = `[首次解锁成功] 云端特征已锁死。正在接收专属逆向工作台代码...`;
-            let restoreWorkspace = new Function(resData.workerScript)();
-            const restoreCanvas = restoreWorkspace.restore(scrambledImageForRestore, resData.seed);
-            restoreWorkspace = null;
-
-            if(restoreCanvas) {
-                container.innerHTML = '';
-                container.appendChild(restoreCanvas);
-                preventSteal(restoreCanvas);
-                restoredCanvasGlobal = restoreCanvas; 
-                logBox.innerHTML += "<br><span style='color:#2ecc71;'>恭喜！动态密室已成功将图片盲恢复，且算法包已被干净格式化。</span>";
-                document.getElementById('btn-fake-download').style.display = 'block'; 
-            } else {
-                logBox.innerHTML = "<span style='color:#e74c3c;'>还原失败：生成的画布为空。</span>";
-            }
         } catch(err) {
-            logBox.innerHTML = `<span style='color:#e74c3c;'>鉴权流程破裂: ${err.message}</span>`;
+            logBox.innerHTML = "<span style='color:#e74c3c;'>解析错误：虽然提取到了密文，但 Base64 数据由于像素偏差损坏。</span>";
+            console.error(err);
         }
     });
 
-    // 破坏性伪下载事件
     document.getElementById('btn-fake-download').addEventListener('click', function() {
         if (!restoredCanvasGlobal) return;
+
         const w = restoredCanvasGlobal.width;
         const h = restoredCanvasGlobal.height;
+
         const destroyCanvas = document.createElement('canvas');
         destroyCanvas.width = w;
         destroyCanvas.height = h;
         const dCtx = destroyCanvas.getContext('2d');
+
         dCtx.drawImage(restoredCanvasGlobal, 0, 0);
-        
         const imgData = dCtx.getImageData(0, 0, w, h);
         const data = imgData.data;
+
         for (let y = 0; y < h; y++) {
             const shift = Math.floor(Math.sin(y / 10) * 30 + (Math.random() - 0.5) * 20);
             if (shift !== 0) {
@@ -574,16 +523,15 @@
         dCtx.fillStyle = '#ff0000';
         dCtx.textAlign = 'center';
         dCtx.textBaseline = 'middle';
+        
         dCtx.strokeStyle = '#ffffff';
         dCtx.lineWidth = Math.max(4, fontSize / 8);
         dCtx.strokeText("不许下载！！！", w / 2, h / 2);
         dCtx.fillText("不许下载！！！", w / 2, h / 2);
 
         const container = document.getElementById('restore-container');
-        if(container) {
-            container.innerHTML = '';
-            container.appendChild(destroyCanvas);
-        }
+        container.innerHTML = '';
+        container.appendChild(destroyCanvas);
 
         const dataUrl = destroyCanvas.toDataURL('image/png');
         const a = document.createElement('a');
@@ -594,12 +542,148 @@
         document.body.removeChild(a);
 
         const logBox = document.getElementById('restore-log');
-        if(logBox) logBox.innerHTML = "<span style='color:#e74c3c; font-size:16px; font-weight:bold;'>警告：触发防盗机制！已对下载资源执行结构化毁灭，并盖戳：不许下载！！！</span>";
+        logBox.innerHTML = "<span style='color:#e74c3c; font-size:16px; font-weight:bold;'>警告：触发防盗机制！已对下载资源执行结构化毁灭，并盖戳：不许下载！！！</span>";
     });
 
-    // 初始化运行
+
+    // =================== 批量处理内存逻辑 ===================
+    let batchFiles = [];
+    let processedCache = []; 
+
+    document.getElementById('upload-batch').addEventListener('change', function(e) {
+        const originalFiles = Array.from(e.target.files);
+        if (originalFiles.length === 0) return;
+
+        batchFiles = originalFiles.filter(file => file.type.startsWith('image/'));
+
+        if (batchFiles.length === 0) {
+            alert("未在选中的文件中检测到有效图片格式！请重新选择。");
+            return;
+        }
+
+        processedCache = [];
+        document.getElementById('btn-batch-download').disabled = true;
+        document.getElementById('btn-batch-download').style.backgroundColor = '#7f8c8d';
+        document.getElementById('btn-batch-download').innerText = "3. 批量导出到本地";
+
+        const previewListContainer = document.getElementById('batch-preview-list');
+        previewListContainer.innerHTML = '';
+        previewListContainer.style.display = 'grid';
+
+        batchFiles.forEach((file) => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const div = document.createElement('div');
+                div.className = 'batch-preview-item';
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                div.appendChild(img);
+                previewListContainer.appendChild(div);
+            }
+            reader.readAsDataURL(file);
+        });
+
+        const btnScramble = document.getElementById('btn-batch-scramble');
+        btnScramble.disabled = false;
+        btnScramble.style.backgroundColor = '#3498db';
+        btnScramble.innerText = `2. 批量打乱 (${batchFiles.length}张)`;
+        
+        const logBox = document.getElementById('batch-log');
+        logBox.style.display = 'block';
+        logBox.innerHTML = `已载入 ${batchFiles.length} 张照片。请点击“批量打乱并缓存”开始。`;
+    });
+
+    document.getElementById('btn-batch-scramble').addEventListener('click', async function() {
+        if (batchFiles.length === 0) return;
+
+        const logBox = document.getElementById('batch-log');
+        logBox.innerHTML = "正在高速处理打散中，请勿关闭页面...";
+        
+        processedCache = []; 
+        let successCount = 0;
+
+        for (let i = 0; i < batchFiles.length; i++) {
+            const file = batchFiles[i];
+            logBox.innerHTML = `处理进度: (${i + 1}/${batchFiles.length}) 正在无损混淆 ${file.name}...`;
+            
+            try {
+                const img = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        const image = new Image();
+                        image.onload = () => resolve(image);
+                        image.onerror = reject;
+                        image.src = e.target.result;
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+                const result = processScrambleCore(img);
+                
+                if (result) {
+                    const dataUrl = result.canvas.toDataURL('image/png');
+                    const cleanName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                    
+                    processedCache.push({
+                        dataUrl: dataUrl,
+                        filename: `scrambled_${cleanName}.png`
+                    });
+                    successCount++;
+                }
+            } catch (err) {
+                console.error(err);
+                logBox.innerHTML += `<br><span style='color:#e74c3c;'>文件 ${file.name} 转换失败，已跳过。</span>`;
+            }
+        }
+
+        if (successCount > 0) {
+            logBox.innerHTML = `✨ 批量混淆完成！已安全缓存 <b>${successCount}</b> 张无损图到内存中。<br>请点击右侧的<b>“批量导出到本地”</b>将其保存到手机。`;
+            
+            const btnDownload = document.getElementById('btn-batch-download');
+            btnDownload.disabled = false;
+            btnDownload.style.backgroundColor = '#2ecc71';
+            btnDownload.innerText = `3. 批量导出 (${successCount}张)`;
+        } else {
+            logBox.innerHTML = "<span style='color:#e74c3c;'>处理完毕，未能成功混淆任何图片。</span>";
+        }
+    });
+
+    document.getElementById('btn-batch-download').addEventListener('click', function() {
+        if (processedCache.length === 0) return;
+
+        const logBox = document.getElementById('batch-log');
+        logBox.innerHTML = "正在通过浏览器原生安全通道依次下载图片...";
+
+        processedCache.forEach((item, index) => {
+            setTimeout(() => {
+                const a = document.createElement('a');
+                a.href = item.dataUrl;
+                a.download = item.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                logBox.innerHTML = `正在保存第 (${index + 1}/${processedCache.length}) 张图片...`;
+
+                if (index === processedCache.length - 1) {
+                    logBox.innerHTML = `🎉 批量无损导出成功！所有图片已依次通过系统原生通道保存。<br>内存缓存已全部清空，避免占用手机内存。`;
+                    
+                    processedCache = [];
+                    batchFiles = [];
+                    document.getElementById('btn-batch-download').disabled = true;
+                    document.getElementById('btn-batch-download').style.backgroundColor = '#7f8c8d';
+                    document.getElementById('btn-batch-download').innerText = "3. 批量导出到本地";
+                    document.getElementById('btn-batch-scramble').disabled = true;
+                    document.getElementById('btn-batch-scramble').innerText = "2. 批量打乱并缓存";
+                    document.getElementById('batch-preview-list').style.display = 'none';
+                    document.getElementById('batch-preview-list').innerHTML = '';
+                }
+            }, index * 400); 
+        });
+    });
+
     preventSteal(document.getElementById('scramble-container'));
-    preventSteal(document.getElementById('batch-scramble-container'));
     preventSteal(document.getElementById('restore-container'));
 </script>
 </body>
